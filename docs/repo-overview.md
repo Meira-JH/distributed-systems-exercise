@@ -12,7 +12,9 @@ The goal is to build a small system that is intentionally easy to break, observe
 
 ## Project Preview
 
-This is the current planning snapshot for the local system bootstrap work.
+This document tracks both the target repository shape and the current local-development baseline.
+
+Story 1.1 has been implemented, so the root workspace, PostgreSQL container baseline, and environment-management docs are already in place. The later stories in this document are still planned work.
 
 ### Story Status Model
 
@@ -50,6 +52,10 @@ Create the repo like this:
 distributed-systems-exercise/
   docs/
     README.md
+    repo-overview.md
+    environment.md
+    epics/
+    stories/
   apps/
     api/
       package.json
@@ -214,58 +220,33 @@ docker compose version
 
 ## Step 2: Initialize The Root Workspace
 
-From the repository root:
+Story 1.1 already established the root workspace baseline. The repository now contains:
+
+1. a root `package.json` with npm workspaces for `apps/*` and `packages/*`
+2. `tsconfig.base.json` using strict TypeScript settings with the TypeORM decorator options enabled
+3. an initial `docker-compose.yml` with a local `postgres` service, persistent volume, and `pg_isready` healthcheck
+4. `.env.example` and `.env.docker.example` for host-run and Docker-networked development
+5. the initial `apps/`, `packages/`, `scripts/`, and `docker/` folder skeleton
+
+The current root command surface is:
 
 ```bash
-npm init -y
-mkdir -p docs apps/api/src apps/worker/src apps/payment-provider/src packages/shared/src packages/database/src/entities packages/database/src/migrations scripts/smoke scripts/load docker/nginx
+npm run build
+npm run dev:api
+npm run dev:worker
+npm run dev:provider
+npm run db:migrate
+npm run db:revert
+npm run db:generate
+npm run db:seed
+npm run infra:up
+npm run infra:logs
+npm run infra:down
 ```
 
-Edit the root `package.json` so it uses npm workspaces:
+The `dev:*` and `db:*` commands intentionally delegate to workspace package scripts that will be added in the later stories. Until those workspaces are fully bootstrapped, the root wrappers fail with a clear message instead of silently doing the wrong thing.
 
-```json
-{
-  "name": "distributed-systems-exercise",
-  "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
-  "scripts": {
-    "build": "npm run build --workspaces",
-    "dev:api": "npm run dev -w apps/api",
-    "dev:worker": "npm run dev -w apps/worker",
-    "dev:provider": "npm run dev -w apps/payment-provider",
-    "db:migrate": "typeorm-ts-node-commonjs -d packages/database/src/data-source.ts migration:run",
-    "db:revert": "typeorm-ts-node-commonjs -d packages/database/src/data-source.ts migration:revert",
-    "db:generate": "typeorm-ts-node-commonjs -d packages/database/src/data-source.ts migration:generate packages/database/src/migrations/AutoMigration",
-    "db:seed": "tsx scripts/seed.ts",
-    "docker:up": "docker compose up --build",
-    "docker:down": "docker compose down -v"
-  }
-}
-```
-
-Create `tsconfig.base.json`:
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "CommonJS",
-    "moduleResolution": "Node",
-    "strict": true,
-    "esModuleInterop": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "outDir": "dist"
-  }
-}
-```
-
-## Step 3: Choose A Minimal Node.js Stack
+## Step 3: Minimal Node.js Stack
 
 Use this dependency set for the Node services in the lab:
 
@@ -290,7 +271,7 @@ Keep it simple on purpose. This lab is about distributed systems behavior, not a
 
 Use TypeORM in the `api` and `worker` services. The `payment-provider` can stay as plain Express because it does not need database access.
 
-## Step 4: Create The Shared And Database Packages
+## Step 4: Shared And Database Packages
 
 Your `packages/shared` workspace should hold:
 
@@ -317,37 +298,44 @@ For queueing specifically:
 2. `apps/api` owns enqueueing code
 3. `apps/worker` owns dequeueing and processing code
 
-## Step 5: Define Environment Variables
+## Step 5: Environment Variables
 
-Create `.env.example`:
+Story 1.1 establishes the committed env templates and the shared naming convention.
+
+Use:
+
+1. `.env.example` when running Node processes directly on your machine
+2. `.env.docker.example` when a containerized service needs to resolve PostgreSQL through the Docker network as `postgres`
+
+The current baseline keys are:
 
 ```env
-POSTGRES_USER=app
-POSTGRES_PASSWORD=app
-POSTGRES_DB=lab
-DATABASE_URL=postgresql://app:app@postgres:5432/lab
+NODE_ENV=development
+LOG_LEVEL=info
 
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=distributed_systems_lab
+
+API_HOST=0.0.0.0
 API_PORT=3000
-PROVIDER_PORT=4000
-PUBLIC_PORT=8080
+API_INSTANCE_NAME=api-1
 
-SESSION_TTL_MINUTES=60
-IDEMPOTENCY_TTL_HOURS=24
-RATE_LIMIT_WINDOW_SECONDS=60
-RATE_LIMIT_MAX_REQUESTS=10
+WORKER_NAME=worker-1
 
-PAYMENT_PROVIDER_URL=http://payment-provider:4000
-PAYMENT_PROVIDER_MODE=success
-EMAIL_PROVIDER_MODE=success
-TYPEORM_LOGGING=false
+PAYMENT_PROVIDER_HOST=0.0.0.0
+PAYMENT_PROVIDER_PORT=4000
 
-ENABLE_IN_MEMORY_SESSIONS=true
-ENABLE_PERMISSION_CACHE=true
-PERMISSION_CACHE_TTL_SECONDS=1800
-SIMULATE_COLD_START_MS=0
+GATEWAY_PORT=8080
 ```
 
-## Step 6: Create Dockerfiles And NGINX Config
+When the later stories add service-specific settings, extend these templates rather than inventing a separate naming scheme. Keep the `POSTGRES_*` variables aligned across Docker Compose, the Node services, and the shared TypeORM package.
+
+See [environment.md](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/environment.md) for file ownership and local-only file rules.
+
+## Step 6: Dockerfiles And NGINX Config
 
 The Node services should each have a simple Dockerfile based on `node:24-alpine`.
 
@@ -377,7 +365,7 @@ Create `docker/nginx/default.conf` and keep the gateway behavior there:
 4. forward `Host`, `X-Forwarded-For`, `X-Forwarded-Proto`, and `X-Request-Id`
 5. optionally enable `limit_req` for coarse IP-based rate limiting
 
-## Step 7: Create `docker-compose.yml`
+## Step 7: `docker-compose.yml`
 
 Use one PostgreSQL container, one payment-provider, one worker, one NGINX gateway, and two API replicas.
 
@@ -386,17 +374,17 @@ Example shape:
 ```yaml
 services:
   postgres:
-    image: postgres:16
+    image: postgres:17-alpine
     environment:
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: app
-      POSTGRES_DB: lab
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: distributed_systems_lab
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app -d lab"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d distributed_systems_lab"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -406,7 +394,8 @@ services:
       context: .
       dockerfile: docker/payment-provider.Dockerfile
     environment:
-      PROVIDER_PORT: 4000
+      PAYMENT_PROVIDER_HOST: 0.0.0.0
+      PAYMENT_PROVIDER_PORT: 4000
     ports:
       - "4000:4000"
 
@@ -415,10 +404,16 @@ services:
       context: .
       dockerfile: docker/api.Dockerfile
     environment:
-      DATABASE_URL: postgresql://app:app@postgres:5432/lab
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: distributed_systems_lab
+      API_HOST: 0.0.0.0
       API_PORT: 3000
-      INSTANCE_NAME: api-1
-      PAYMENT_PROVIDER_URL: http://payment-provider:4000
+      API_INSTANCE_NAME: api-1
+      PAYMENT_PROVIDER_HOST: payment-provider
+      PAYMENT_PROVIDER_PORT: 4000
       ENABLE_IN_MEMORY_SESSIONS: "true"
     depends_on:
       postgres:
@@ -433,10 +428,16 @@ services:
       context: .
       dockerfile: docker/api.Dockerfile
     environment:
-      DATABASE_URL: postgresql://app:app@postgres:5432/lab
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: distributed_systems_lab
+      API_HOST: 0.0.0.0
       API_PORT: 3000
-      INSTANCE_NAME: api-2
-      PAYMENT_PROVIDER_URL: http://payment-provider:4000
+      API_INSTANCE_NAME: api-2
+      PAYMENT_PROVIDER_HOST: payment-provider
+      PAYMENT_PROVIDER_PORT: 4000
       ENABLE_IN_MEMORY_SESSIONS: "true"
     depends_on:
       postgres:
@@ -461,8 +462,14 @@ services:
       context: .
       dockerfile: docker/worker.Dockerfile
     environment:
-      DATABASE_URL: postgresql://app:app@postgres:5432/lab
-      PAYMENT_PROVIDER_URL: http://payment-provider:4000
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: distributed_systems_lab
+      WORKER_NAME: worker-1
+      PAYMENT_PROVIDER_HOST: payment-provider
+      PAYMENT_PROVIDER_PORT: 4000
     depends_on:
       postgres:
         condition: service_healthy
@@ -470,7 +477,7 @@ services:
         condition: service_started
 
 volumes:
-  postgres_data:
+  postgres-data:
 ```
 
 Important:
@@ -480,7 +487,7 @@ Important:
 3. Start with `ENABLE_IN_MEMORY_SESSIONS=true` so you can reproduce Q18 before fixing it.
 4. Run TypeORM migrations before using the app for the first time.
 
-## Step 8: Create The Database Layer With TypeORM
+## Step 8: Database Layer With TypeORM
 
 Put the database model in `packages/database`.
 
@@ -489,7 +496,7 @@ Create `packages/database/src/data-source.ts` with one shared `DataSource` that 
 The important settings are:
 
 1. `type: "postgres"`
-2. `url: process.env.DATABASE_URL`
+2. `host`, `port`, `username`, `password`, and `database` read from the shared `POSTGRES_*` environment variables
 3. `entities: [...]`
 4. `migrations: [...]`
 5. `synchronize: false`
@@ -739,7 +746,7 @@ Create a simple `scripts/seed.ts` file that initializes the shared `DataSource`,
 
 This will let you practice login, payment flow, and permission revocation.
 
-## Step 10: Build The Payment Provider Mock
+## Step 10: The Payment Provider Mock
 
 This service is one of the most important parts of the lab.
 
@@ -748,7 +755,7 @@ To keep the lab small, let the `payment-provider` container simulate both:
 1. the external payment API
 2. the external email provider
 
-Implement these endpoints:
+Endpoints:
 
 1. `POST /charges`
    Pretends to charge a card.
@@ -759,7 +766,7 @@ Implement these endpoints:
 4. `GET /mode`
    Returns the current provider mode.
 
-Support these modes:
+Modes:
 
 1. `success`
    Always return `200` with a fake charge ID.
@@ -772,7 +779,7 @@ Support these modes:
 5. `success_then_timeout`
    Pretend the provider completed the charge but your client never saw the response. This is excellent for testing uncertain payment state.
 
-Make the mode endpoint explicit. For example, accept a body like:
+Examples:
 
 ```json
 {
@@ -792,13 +799,13 @@ or:
 
 Also add provider-side idempotency support:
 
-1. payments should accept an idempotency key
-2. emails should accept a dedupe key
-3. repeated requests with the same safe key should return the original result
+1. payments accept an idempotency key
+2. emails accept a dedupe key
+3. repeated requests with the same safe key return the original result
 
-## Step 11: Build The API Service
+## Step 11: The API Service
 
-Implement these routes first:
+Routes:
 
 1. `POST /auth/login`
 2. `GET /me`
@@ -820,13 +827,13 @@ At API startup:
 
 The API is where queue-producing code belongs.
 
-Good places for that code are:
+The queues are located at:
 
 1. `apps/api/src/services/queueService.ts`
 2. `apps/api/src/repositories/jobRepo.ts`
 3. `apps/api/src/repositories/outboxRepo.ts`
 
-The API should enqueue work for things like:
+The API enqueue work for things like:
 
 1. `send_email`
 2. `reconcile_payment`
@@ -844,11 +851,9 @@ Then upgrade to:
 
 - a TypeORM `Repository<Session>` backed by the PostgreSQL `sessions` table
 
-This deliberate progression lets you reproduce Q18 first and then fix it.
-
 #### `idempotencyService`
 
-It should:
+It:
 
 1. Read `Idempotency-Key`
 2. Hash the normalized request payload
@@ -860,7 +865,7 @@ It should:
 
 #### `paymentService`
 
-It should:
+It:
 
 1. Create or load an order
 2. Use an idempotency key when calling the external payment provider
@@ -870,7 +875,7 @@ It should:
 
 #### `permissionService`
 
-It should:
+It:
 
 1. Load permissions from DB
 2. Cache them for a TTL
@@ -897,7 +902,7 @@ Initialize the same shared TypeORM `DataSource` before starting the worker loop.
 
 The worker is where queue-consuming code belongs.
 
-Good places for that code are:
+The code is in:
 
 1. `apps/worker/src/worker.ts` for process startup
 2. `apps/worker/src/services/queuePoller.ts` for polling and claiming jobs
@@ -906,7 +911,7 @@ Good places for that code are:
 5. `apps/worker/src/services/retryPolicy.ts` for backoff and jitter
 6. `apps/worker/src/services/deadLetterService.ts` for exhausted retries
 
-The worker should never be responsible for deciding business events that need background work. It should only consume jobs that the API or outbox flow already created.
+The worker is never responsible for deciding business events that need background work. It only consumes jobs that the API or outbox flow already created.
 
 ### Polling pattern
 
@@ -918,7 +923,7 @@ Use a query like:
 
 This avoids two worker instances taking the same job.
 
-In TypeORM, this is one of the places where using a query builder or a narrow raw SQL query is appropriate. Do not force everything through generic CRUD helpers when the locking behavior is the real point of the exercise.
+In TypeORM, this is one of the places where using a query builder or a narrow raw SQL query is appropriate.
 
 ### Jobs to implement
 
@@ -942,9 +947,9 @@ After `max_attempts`:
 
 ## Step 13: Build The NGINX Gateway
 
-The gateway should be an NGINX config, not a Node app.
+The gateway is an NGINX config.
 
-Create `docker/nginx/default.conf` with:
+Inside `docker/nginx/default.conf` with:
 
 1. an `upstream` block pointing at `api-1:3000` and `api-2:3000`
 2. a `server` block listening on `8080`
@@ -997,8 +1002,6 @@ server {
 ```
 
 NGINX uses round-robin by default when multiple upstream servers are listed, so you do not need custom proxy code for the base lab.
-
-This gateway is what makes Q18 and Q19 feel real.
 
 ## Step 14: Bring Everything Up
 
