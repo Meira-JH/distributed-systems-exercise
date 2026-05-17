@@ -20,8 +20,8 @@
     "db:revert": "node ./scripts/run-package-script.mjs packages/database revert",
     "db:generate": "node ./scripts/run-package-script.mjs packages/database generate",
     "db:seed": "node ./scripts/run-package-script.mjs packages/database seed",
-    "infra:up": "docker compose up -d postgres",
-    "infra:down": "docker compose down",
-    "infra:logs": "docker compose logs -f postgres"
+    "infra:up": "node ./scripts/run-docker-compose.mjs up -d postgres",
+    "infra:down": "node ./scripts/run-docker-compose.mjs down",
+    "infra:logs": "node ./scripts/run-docker-compose.mjs logs -f postgres"
   }
 }
