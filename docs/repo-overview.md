@@ -10,6 +10,23 @@ This guide gives a local practice environment for distributed systems using:
 
 The goal is to build a small system that is intentionally easy to break, observe, fix, and test. 
 
+## Project Preview
+
+This document tracks both the target repository shape and the current local-development baseline.
+
+Story 1.1 has been implemented, so the root workspace, PostgreSQL container baseline, and environment-management docs are already in place. The later stories in this document are still planned work.
+
+### Story Status Model
+
+- `not ready`
+  The story is still blocked by missing dependencies, unresolved decisions, or earlier work that has not been completed yet.
+- `ready-for-dev`
+  The story is clear enough to implement now and does not have any remaining project-internal blockers.
+- `ready-for-review`
+  Development work is complete and the story is waiting for review, validation, or acceptance.
+- `done`
+  The story has been implemented, reviewed, and accepted as complete.
+
 ## What You Will Build
 
 You will run six containers locally:
@@ -27,7 +44,7 @@ You will run six containers locally:
 6. `postgres`
    Shared state for all services.
 
-## Recommended Repository Structure
+## Repository Structure
 
 Create the repo like this:
 
@@ -35,6 +52,10 @@ Create the repo like this:
 distributed-systems-exercise/
   docs/
     README.md
+    repo-overview.md
+    environment.md
+    epics/
+    stories/
   apps/
     api/
       package.json
@@ -135,7 +156,7 @@ distributed-systems-exercise/
   docker-compose.yml
 ```
 
-## High-Level Architecture
+## Context Architecture
 
 ```mermaid
 flowchart LR
@@ -181,7 +202,7 @@ Keep these principles constant while building:
 
 Install these locally:
 
-1. Node.js `20.x` or later
+1. Node.js `24.x` or later
 2. `npm` `10.x` or later
 3. Docker Desktop
 4. `curl`
@@ -199,58 +220,33 @@ docker compose version
 
 ## Step 2: Initialize The Root Workspace
 
-From the repository root:
+Story 1.1 already established the root workspace baseline. The repository now contains:
+
+1. a root `package.json` with npm workspaces for `apps/*` and `packages/*`
+2. `tsconfig.base.json` using strict TypeScript settings with the TypeORM decorator options enabled
+3. an initial `docker-compose.yml` with a local `postgres` service, persistent volume, and `pg_isready` healthcheck
+4. `.env.example` and `.env.docker.example` for host-run and Docker-networked development
+5. the initial `apps/`, `packages/`, `scripts/`, and `docker/` folder skeleton
+
+The current root command surface is:
 
 ```bash
-npm init -y
-mkdir -p docs apps/api/src apps/worker/src apps/payment-provider/src packages/shared/src packages/database/src/entities packages/database/src/migrations scripts/smoke scripts/load docker/nginx
+npm run build
+npm run dev:api
+npm run dev:worker
+npm run dev:provider
+npm run db:migrate
+npm run db:revert
+npm run db:generate
+npm run db:seed
+npm run infra:up
+npm run infra:logs
+npm run infra:down
 ```
 
-Edit the root `package.json` so it uses npm workspaces:
+The `dev:*` and `db:*` commands intentionally delegate to workspace package scripts that will be added in the later stories. Until those workspaces are fully bootstrapped, the root wrappers fail with a clear message instead of silently doing the wrong thing.
 
-```json
-{
-  "name": "distributed-systems-exercise",
-  "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
-  "scripts": {
-    "build": "npm run build --workspaces",
-    "dev:api": "npm run dev -w apps/api",
-    "dev:worker": "npm run dev -w apps/worker",
-    "dev:provider": "npm run dev -w apps/payment-provider",
-    "db:migrate": "typeorm-ts-node-commonjs -d packages/database/src/data-source.ts migration:run",
-    "db:revert": "typeorm-ts-node-commonjs -d packages/database/src/data-source.ts migration:revert",
-    "db:generate": "typeorm-ts-node-commonjs -d packages/database/src/data-source.ts migration:generate packages/database/src/migrations/AutoMigration",
-    "db:seed": "tsx scripts/seed.ts",
-    "docker:up": "docker compose up --build",
-    "docker:down": "docker compose down -v"
-  }
-}
-```
-
-Create `tsconfig.base.json`:
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "CommonJS",
-    "moduleResolution": "Node",
-    "strict": true,
-    "esModuleInterop": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "outDir": "dist"
-  }
-}
-```
-
-## Step 3: Choose A Minimal Node.js Stack
+## Step 3: Minimal Node.js Stack
 
 Use this dependency set for the Node services in the lab:
 
@@ -275,7 +271,7 @@ Keep it simple on purpose. This lab is about distributed systems behavior, not a
 
 Use TypeORM in the `api` and `worker` services. The `payment-provider` can stay as plain Express because it does not need database access.
 
-## Step 4: Create The Shared And Database Packages
+## Step 4: Shared And Database Packages
 
 Your `packages/shared` workspace should hold:
 
@@ -302,39 +298,54 @@ For queueing specifically:
 2. `apps/api` owns enqueueing code
 3. `apps/worker` owns dequeueing and processing code
 
-## Step 5: Define Environment Variables
+## Step 5: Environment Variables
 
-Create `.env.example`:
+Story 1.1 establishes the committed env templates and the shared naming convention.
+
+Use:
+
+1. `.env.example` when running Node processes directly on your machine
+2. `.env.docker.example` as a Docker-only overlay when a containerized service needs Docker-network hostnames
+
+The current baseline keys are:
 
 ```env
-POSTGRES_USER=app
-POSTGRES_PASSWORD=app
-POSTGRES_DB=lab
-DATABASE_URL=postgresql://app:app@postgres:5432/lab
+NODE_ENV=development
+LOG_LEVEL=info
 
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=distributed_systems_lab
+
+API_HOST=0.0.0.0
 API_PORT=3000
-PROVIDER_PORT=4000
-PUBLIC_PORT=8080
+API_INSTANCE_NAME=api-1
 
-SESSION_TTL_MINUTES=60
-IDEMPOTENCY_TTL_HOURS=24
-RATE_LIMIT_WINDOW_SECONDS=60
-RATE_LIMIT_MAX_REQUESTS=10
+WORKER_NAME=worker-1
 
-PAYMENT_PROVIDER_URL=http://payment-provider:4000
-PAYMENT_PROVIDER_MODE=success
-EMAIL_PROVIDER_MODE=success
-TYPEORM_LOGGING=false
+PAYMENT_PROVIDER_BIND_HOST=0.0.0.0
+PAYMENT_PROVIDER_PORT=4000
+PAYMENT_PROVIDER_BASE_URL=http://localhost:4000
 
-ENABLE_IN_MEMORY_SESSIONS=true
-ENABLE_PERMISSION_CACHE=true
-PERMISSION_CACHE_TTL_SECONDS=1800
-SIMULATE_COLD_START_MS=0
+GATEWAY_PORT=8080
 ```
 
-## Step 6: Create Dockerfiles And NGINX Config
+The Docker overlay currently changes only the container-routed values:
 
-The Node services should each have a simple Dockerfile based on Node `20-alpine`.
+```env
+POSTGRES_HOST=postgres
+PAYMENT_PROVIDER_BASE_URL=http://payment-provider:4000
+```
+
+When the later stories add service-specific settings, extend these templates rather than inventing a separate naming scheme. Keep the `POSTGRES_*` variables aligned across Docker Compose, the Node services, and the shared TypeORM package. Keep service bind addresses separate from outbound service URLs.
+
+See [environment.md](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/environment.md) for file ownership and local-only file rules.
+
+## Step 6: Dockerfiles And NGINX Config
+
+The Node services should each have a simple Dockerfile based on `node:24-alpine`.
 
 The pattern is:
 
@@ -362,7 +373,7 @@ Create `docker/nginx/default.conf` and keep the gateway behavior there:
 4. forward `Host`, `X-Forwarded-For`, `X-Forwarded-Proto`, and `X-Request-Id`
 5. optionally enable `limit_req` for coarse IP-based rate limiting
 
-## Step 7: Create `docker-compose.yml`
+## Step 7: `docker-compose.yml`
 
 Use one PostgreSQL container, one payment-provider, one worker, one NGINX gateway, and two API replicas.
 
@@ -371,17 +382,17 @@ Example shape:
 ```yaml
 services:
   postgres:
-    image: postgres:16
+    image: postgres:17-alpine
     environment:
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: app
-      POSTGRES_DB: lab
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: distributed_systems_lab
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app -d lab"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d distributed_systems_lab"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -391,7 +402,8 @@ services:
       context: .
       dockerfile: docker/payment-provider.Dockerfile
     environment:
-      PROVIDER_PORT: 4000
+      PAYMENT_PROVIDER_BIND_HOST: 0.0.0.0
+      PAYMENT_PROVIDER_PORT: 4000
     ports:
       - "4000:4000"
 
@@ -400,10 +412,15 @@ services:
       context: .
       dockerfile: docker/api.Dockerfile
     environment:
-      DATABASE_URL: postgresql://app:app@postgres:5432/lab
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: distributed_systems_lab
+      API_HOST: 0.0.0.0
       API_PORT: 3000
-      INSTANCE_NAME: api-1
-      PAYMENT_PROVIDER_URL: http://payment-provider:4000
+      API_INSTANCE_NAME: api-1
+      PAYMENT_PROVIDER_BASE_URL: http://payment-provider:4000
       ENABLE_IN_MEMORY_SESSIONS: "true"
     depends_on:
       postgres:
@@ -418,10 +435,15 @@ services:
       context: .
       dockerfile: docker/api.Dockerfile
     environment:
-      DATABASE_URL: postgresql://app:app@postgres:5432/lab
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: distributed_systems_lab
+      API_HOST: 0.0.0.0
       API_PORT: 3000
-      INSTANCE_NAME: api-2
-      PAYMENT_PROVIDER_URL: http://payment-provider:4000
+      API_INSTANCE_NAME: api-2
+      PAYMENT_PROVIDER_BASE_URL: http://payment-provider:4000
       ENABLE_IN_MEMORY_SESSIONS: "true"
     depends_on:
       postgres:
@@ -446,8 +468,13 @@ services:
       context: .
       dockerfile: docker/worker.Dockerfile
     environment:
-      DATABASE_URL: postgresql://app:app@postgres:5432/lab
-      PAYMENT_PROVIDER_URL: http://payment-provider:4000
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: distributed_systems_lab
+      WORKER_NAME: worker-1
+      PAYMENT_PROVIDER_BASE_URL: http://payment-provider:4000
     depends_on:
       postgres:
         condition: service_healthy
@@ -455,7 +482,7 @@ services:
         condition: service_started
 
 volumes:
-  postgres_data:
+  postgres-data:
 ```
 
 Important:
@@ -465,7 +492,7 @@ Important:
 3. Start with `ENABLE_IN_MEMORY_SESSIONS=true` so you can reproduce Q18 before fixing it.
 4. Run TypeORM migrations before using the app for the first time.
 
-## Step 8: Create The Database Layer With TypeORM
+## Step 8: Database Layer With TypeORM
 
 Put the database model in `packages/database`.
 
@@ -474,7 +501,7 @@ Create `packages/database/src/data-source.ts` with one shared `DataSource` that 
 The important settings are:
 
 1. `type: "postgres"`
-2. `url: process.env.DATABASE_URL`
+2. `host`, `port`, `username`, `password`, and `database` read from the shared `POSTGRES_*` environment variables
 3. `entities: [...]`
 4. `migrations: [...]`
 5. `synchronize: false`
@@ -724,7 +751,7 @@ Create a simple `scripts/seed.ts` file that initializes the shared `DataSource`,
 
 This will let you practice login, payment flow, and permission revocation.
 
-## Step 10: Build The Payment Provider Mock
+## Step 10: The Payment Provider Mock
 
 This service is one of the most important parts of the lab.
 
@@ -733,7 +760,7 @@ To keep the lab small, let the `payment-provider` container simulate both:
 1. the external payment API
 2. the external email provider
 
-Implement these endpoints:
+Endpoints:
 
 1. `POST /charges`
    Pretends to charge a card.
@@ -744,7 +771,7 @@ Implement these endpoints:
 4. `GET /mode`
    Returns the current provider mode.
 
-Support these modes:
+Modes:
 
 1. `success`
    Always return `200` with a fake charge ID.
@@ -757,7 +784,7 @@ Support these modes:
 5. `success_then_timeout`
    Pretend the provider completed the charge but your client never saw the response. This is excellent for testing uncertain payment state.
 
-Make the mode endpoint explicit. For example, accept a body like:
+Examples:
 
 ```json
 {
@@ -777,13 +804,13 @@ or:
 
 Also add provider-side idempotency support:
 
-1. payments should accept an idempotency key
-2. emails should accept a dedupe key
-3. repeated requests with the same safe key should return the original result
+1. payments accept an idempotency key
+2. emails accept a dedupe key
+3. repeated requests with the same safe key return the original result
 
-## Step 11: Build The API Service
+## Step 11: The API Service
 
-Implement these routes first:
+Routes:
 
 1. `POST /auth/login`
 2. `GET /me`
@@ -805,13 +832,13 @@ At API startup:
 
 The API is where queue-producing code belongs.
 
-Good places for that code are:
+The queues are located at:
 
 1. `apps/api/src/services/queueService.ts`
 2. `apps/api/src/repositories/jobRepo.ts`
 3. `apps/api/src/repositories/outboxRepo.ts`
 
-The API should enqueue work for things like:
+The API enqueue work for things like:
 
 1. `send_email`
 2. `reconcile_payment`
@@ -829,11 +856,9 @@ Then upgrade to:
 
 - a TypeORM `Repository<Session>` backed by the PostgreSQL `sessions` table
 
-This deliberate progression lets you reproduce Q18 first and then fix it.
-
 #### `idempotencyService`
 
-It should:
+It:
 
 1. Read `Idempotency-Key`
 2. Hash the normalized request payload
@@ -845,7 +870,7 @@ It should:
 
 #### `paymentService`
 
-It should:
+It:
 
 1. Create or load an order
 2. Use an idempotency key when calling the external payment provider
@@ -855,7 +880,7 @@ It should:
 
 #### `permissionService`
 
-It should:
+It:
 
 1. Load permissions from DB
 2. Cache them for a TTL
@@ -882,7 +907,7 @@ Initialize the same shared TypeORM `DataSource` before starting the worker loop.
 
 The worker is where queue-consuming code belongs.
 
-Good places for that code are:
+The code is in:
 
 1. `apps/worker/src/worker.ts` for process startup
 2. `apps/worker/src/services/queuePoller.ts` for polling and claiming jobs
@@ -891,7 +916,7 @@ Good places for that code are:
 5. `apps/worker/src/services/retryPolicy.ts` for backoff and jitter
 6. `apps/worker/src/services/deadLetterService.ts` for exhausted retries
 
-The worker should never be responsible for deciding business events that need background work. It should only consume jobs that the API or outbox flow already created.
+The worker is never responsible for deciding business events that need background work. It only consumes jobs that the API or outbox flow already created.
 
 ### Polling pattern
 
@@ -903,7 +928,7 @@ Use a query like:
 
 This avoids two worker instances taking the same job.
 
-In TypeORM, this is one of the places where using a query builder or a narrow raw SQL query is appropriate. Do not force everything through generic CRUD helpers when the locking behavior is the real point of the exercise.
+In TypeORM, this is one of the places where using a query builder or a narrow raw SQL query is appropriate.
 
 ### Jobs to implement
 
@@ -927,9 +952,9 @@ After `max_attempts`:
 
 ## Step 13: Build The NGINX Gateway
 
-The gateway should be an NGINX config, not a Node app.
+The gateway is an NGINX config.
 
-Create `docker/nginx/default.conf` with:
+Inside `docker/nginx/default.conf` with:
 
 1. an `upstream` block pointing at `api-1:3000` and `api-2:3000`
 2. a `server` block listening on `8080`
@@ -983,8 +1008,6 @@ server {
 
 NGINX uses round-robin by default when multiple upstream servers are listed, so you do not need custom proxy code for the base lab.
 
-This gateway is what makes Q18 and Q19 feel real.
-
 ## Step 14: Bring Everything Up
 
 When the files exist, start the system:
@@ -1005,701 +1028,3 @@ curl http://localhost:4000/mode
 ```
 
 You now have a real local lab.
-
-## Exercise Labs
-
-This section is the core of the document. For each question, first reproduce the failure, then implement the correct behavior, then test it again.
-
-## Q15: Idempotency
-
-### What should happen
-
-If the client retries:
-
-```http
-POST /payments
-Idempotency-Key: abc-123
-```
-
-the backend must not charge twice.
-
-### What to build
-
-In `POST /payments`:
-
-1. Require `Idempotency-Key`
-2. Normalize the request payload
-3. Hash it
-4. Insert an `idempotency_keys` row with status `in_progress`
-5. If the key already exists:
-   same key plus same payload should return the stored result
-6. If the key already exists with a different payload:
-   reject it
-7. If the key exists but is still processing:
-   return `409`, `202`, or wait, depending on your design
-8. On success:
-   store `response_code` and `response_body_json`
-9. Add TTL cleanup
-
-### Minimal state machine
-
-Use idempotency statuses like:
-
-- `in_progress`
-- `completed`
-- `failed`
-
-### Good response behavior
-
-1. Same key plus same payload:
-   return original result
-2. Same key plus different payload:
-   return `409 Conflict` or `422 Unprocessable Entity`
-3. Same key while original request is still running:
-   return `409 Conflict`, `202 Accepted`, or block until completion
-
-### How to test it
-
-Start with provider mode `success`.
-
-Create a payment:
-
-```bash
-curl -i -X POST http://localhost:8080/payments \
-  -H 'Content-Type: application/json' \
-  -H 'Idempotency-Key: abc-123' \
-  -d '{"orderId":"order-1","amountCents":5000,"cardToken":"tok_visa"}'
-```
-
-Send the exact same request again.
-
-Expected result:
-
-1. Same HTTP response code
-2. Same payment result
-3. No second charge row created
-
-Now send the same key with a different amount:
-
-```bash
-curl -i -X POST http://localhost:8080/payments \
-  -H 'Content-Type: application/json' \
-  -H 'Idempotency-Key: abc-123' \
-  -d '{"orderId":"order-1","amountCents":9000,"cardToken":"tok_visa"}'
-```
-
-Expected result:
-
-1. Request rejected
-2. Clear error explaining the key was already used with another payload
-
-### Senior-level details to include in your explanation
-
-1. Store the request hash
-2. Store operation status
-3. Store final response
-4. Handle in-progress duplicates
-5. Expire old keys with TTL
-
-## Q16: Queue Retries
-
-### What should happen
-
-If the email provider returns `503`, the worker should retry with exponential backoff and jitter. If retries are exhausted, the job should move to a dead-letter queue or dead-letter table.
-
-### What to build
-
-Create a `send_email` job with fields:
-
-1. recipient
-2. subject
-3. body
-4. dedupe key
-5. attempt count
-6. max attempts
-
-Worker policy:
-
-1. Treat `503` as transient
-2. Compute backoff like `baseDelayMs * 2^attempt`
-3. Add jitter
-4. Reschedule
-5. Make the job idempotent so duplicate processing does not send duplicate email
-
-### How to make the job idempotent
-
-Add `dedupe_key` on the job, and in the simulated provider:
-
-1. accept the dedupe key
-2. return the original send result for repeated sends
-
-### How to test it
-
-Switch the provider to flaky mode:
-
-```bash
-curl -X POST http://localhost:4000/mode \
-  -H 'Content-Type: application/json' \
-  -d '{"target":"emails","mode":"flaky_503"}'
-```
-
-Create a job by hitting an API endpoint like `POST /debug/send-email`.
-
-Expected result:
-
-1. some attempts fail with `503`
-2. worker retries later
-3. eventually the job either completes or dead-letters
-
-To test dead-letter behavior:
-
-```bash
-curl -X POST http://localhost:4000/mode \
-  -H 'Content-Type: application/json' \
-  -d '{"target":"emails","mode":"always_503"}'
-```
-
-Then create another job.
-
-Expected result:
-
-1. retries happen up to max attempts
-2. job moves to `dead_letters`
-3. duplicate emails are not sent
-
-### Senior-level details to include in your explanation
-
-1. Retry only transient failures
-2. Use exponential backoff
-3. Add jitter to avoid retry storms
-4. Make the job idempotent
-5. Use dead-letter handling after max attempts
-
-## Q17: External Payment Failure
-
-### The broken flow
-
-This is the classic bad flow:
-
-```ts
-await db.orders.create(order);
-await paymentProvider.charge(card, amount);
-await db.orders.update(order.id, { status: "paid" });
-```
-
-### Why it is broken
-
-If the payment provider succeeds but the final DB update fails, the customer may be charged while your system still shows the order as unpaid or unknown.
-
-### Better local design
-
-Use this conceptual flow:
-
-1. Create order as `pending_payment`
-2. Start a payment record
-3. Call provider with idempotency key
-4. Save provider result
-5. Mark order `paid` if local update succeeds
-6. If local update fails after provider success:
-   store `payment_unknown` or `payment_succeeded_but_finalize_failed`
-7. Enqueue reconciliation job
-
-### What to build
-
-Add a debug path that simulates local DB failure after provider success.
-
-For example:
-
-- header: `X-Simulate-Finalize-Failure: true`
-- or query param: `?simulateFinalizeFailure=true`
-
-### How to test it
-
-1. Set provider mode to `success`
-2. Create an order
-3. Pay with the debug failure enabled
-
-Expected result:
-
-1. provider records a successful charge
-2. order is not fully finalized
-3. local system marks the state as uncertain instead of lying
-4. reconciliation job later resolves it
-
-### Reconciliation strategy
-
-Your worker should:
-
-1. read uncertain payment records
-2. call the provider to confirm final charge status
-3. update local order state
-4. record the reconciliation result
-
-### Senior-level details to include in your explanation
-
-1. Use a state machine, not one boolean
-2. Use transactions for local DB changes
-3. Use idempotency with the external provider
-4. Reconcile uncertain states asynchronously
-5. Consider the outbox pattern
-
-## Q18: Horizontal Scaling
-
-### What should happen
-
-If sessions are stored in memory and you deploy multiple API replicas, users will get randomly logged out because each replica has different process memory.
-
-### How to reproduce the bug
-
-Start the system with:
-
-- `api-1`
-- `api-2`
-- `gateway` running NGINX round-robin between them
-- `ENABLE_IN_MEMORY_SESSIONS=true`
-
-Login:
-
-```bash
-curl -i -X POST http://localhost:8080/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"user@example.com","password":"password"}'
-```
-
-Save the returned cookie.
-
-Call `/me` several times through the gateway:
-
-```bash
-curl -i http://localhost:8080/me --cookie "sessionToken=YOUR_TOKEN"
-curl -i http://localhost:8080/me --cookie "sessionToken=YOUR_TOKEN"
-curl -i http://localhost:8080/me --cookie "sessionToken=YOUR_TOKEN"
-```
-
-Expected broken behavior:
-
-1. one request works
-2. another request hits the other replica
-3. that replica does not know the session
-4. the user appears logged out
-
-### Fix
-
-Move sessions into the `sessions` PostgreSQL table.
-
-In practice for this project, that means moving from an in-memory `Map` to a TypeORM `Session` entity plus repository-backed lookup.
-
-Then set:
-
-```env
-ENABLE_IN_MEMORY_SESSIONS=false
-```
-
-### Re-test
-
-Repeat the login and `/me` calls.
-
-Expected fixed behavior:
-
-1. both replicas can load the same shared session
-2. no random logout
-
-### Senior-level details to include in your explanation
-
-1. In-memory state is local to one instance
-2. Requests hit different replicas
-3. Use shared session storage
-4. Stateless tokens can also work depending on requirements
-5. Sticky sessions are weaker than shared or stateless design
-
-## Q19: Rate Limiting
-
-### What should happen
-
-Protect a public endpoint from abuse using distributed, shared rate limiting.
-
-### Where to implement it
-
-Practice two variants:
-
-1. At the NGINX gateway for coarse per-IP protection
-2. Inside the API middleware for stronger shared enforcement
-
-For interview answers, explicitly mention possible layers:
-
-1. edge or CDN
-2. API gateway
-3. application middleware
-4. distributed shared storage for counters
-
-### Two-layer implementation
-
-For this lab, use two layers:
-
-1. NGINX `limit_req` for cheap first-line filtering at the edge
-2. a PostgreSQL-backed limiter in the API for shared, multi-replica policy
-
-The NGINX layer is great for coarse per-IP protection, but it is local to the gateway instance. The PostgreSQL-backed limiter is what lets you practice the distributed part of the question.
-
-### PostgreSQL-backed application limiter
-
-Implement a simple token bucket or fixed-window counter using a shared table.
-
-Suggested table fields:
-
-1. subject key, such as IP or user ID
-2. window start
-3. request count or token balance
-4. updated at
-
-### Flow
-
-For each request:
-
-1. identify the subject, such as IP, user ID, or API key
-2. read or create the current window row
-3. atomically increment usage
-4. reject when the limit is exceeded
-
-### How to test it
-
-Use a simple load script or repeated curl calls against a public endpoint.
-
-Example idea:
-
-```bash
-for i in {1..20}; do
-  curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/protected/report
-done
-```
-
-Expected result:
-
-1. early requests succeed
-2. later requests return `429`
-3. logs show which subject was limited
-
-### Senior-level details to include in your explanation
-
-1. limit by IP, user, API key, or a combination
-2. validate requests before heavy work
-3. add abuse detection and logging
-4. consider exponential penalties for repeated abuse
-5. mention edge, gateway, and app layers
-
-## Q20: Cache Invalidation
-
-### What should happen
-
-If permissions are cached for 30 minutes and an admin removes access, the user may continue to access protected actions until the cache expires.
-
-### How to reproduce the bug
-
-Start with:
-
-- `ENABLE_PERMISSION_CACHE=true`
-- `PERMISSION_CACHE_TTL_SECONDS=1800`
-- no invalidation logic
-
-Flow:
-
-1. login as normal user
-2. access a protected endpoint so permissions are cached
-3. revoke the permission as admin
-4. immediately access the protected endpoint again
-
-Expected broken behavior:
-
-1. user still has access
-2. cached permissions are stale
-
-### Fix options
-
-Practice at least one of these:
-
-1. short TTL
-2. versioned permissions
-3. event-based invalidation
-4. bypass cache for highly sensitive actions
-
-### Strong fix for this lab
-
-Use `permission_version`:
-
-1. store a version on the user record
-2. increment it on permission changes
-3. include it in the cache key or validate it before using cache
-
-Optional advanced fix:
-
-Use PostgreSQL `LISTEN/NOTIFY` so each API replica clears its in-memory permission cache when admin changes happen.
-
-### How to test it
-
-1. login as user
-2. hit protected route
-3. revoke permission
-4. hit protected route again
-
-Expected fixed behavior:
-
-1. user is denied quickly after revocation
-
-### Senior-level details to include in your explanation
-
-1. stale cache is the root issue
-2. sensitive permissions need careful invalidation
-3. TTL alone may be too weak
-4. versioning and event-based invalidation are stronger
-5. force fresh checks for high-risk operations
-
-## Q21: Serverless Cold Starts
-
-### What cold starts are
-
-A cold start happens when a function or container is started fresh and must initialize before serving a request. That adds latency.
-
-### How to simulate locally
-
-You are not running true serverless here, but you can still reproduce the behavior:
-
-1. add a startup delay or heavy lazy import
-2. restart a container
-3. measure the first request
-4. measure the next few warm requests
-
-### What to build
-
-Add a debug endpoint like:
-
-- `GET /debug/cold-start`
-
-Implement a module-level flag:
-
-1. if this is the first request in the process, sleep for `SIMULATE_COLD_START_MS`
-2. then mark the process warm
-
-Also log:
-
-1. whether the request was cold or warm
-2. the initialization duration
-
-### How to test it
-
-Set:
-
-```env
-SIMULATE_COLD_START_MS=3000
-```
-
-Restart one API container:
-
-```bash
-docker compose restart api-1
-```
-
-Then hit it directly:
-
-```bash
-time curl http://localhost:3001/debug/cold-start
-time curl http://localhost:3001/debug/cold-start
-```
-
-Expected result:
-
-1. first request is much slower
-2. later requests are fast
-
-### Senior-level details to include in your explanation
-
-1. cold starts add latency
-2. bundle size and heavy imports matter
-3. runtime initialization matters
-4. provisioned concurrency or warmers can help in real platforms
-5. efficient startup reduces user-facing impact
-
-## Q22: Observability
-
-### Problem statement
-
-A user says:
-
-`The AI assistant sometimes takes 20 seconds.`
-
-### What you should inspect
-
-Your local system should let you answer questions like:
-
-1. what was the end-to-end request latency
-2. which service was slow
-3. whether the slowdown came from DB calls, provider calls, queue backlog, retries, or startup delay
-
-### What to build
-
-Implement these observability basics:
-
-1. structured JSON logs
-2. correlation ID on every request
-3. timings for each downstream call
-4. queue depth logging
-5. logs for retry attempts
-6. request outcome logging
-
-### Minimum fields to log
-
-For every request:
-
-1. `requestId`
-2. `service`
-3. `route`
-4. `method`
-5. `statusCode`
-6. `durationMs`
-7. `userId` when available
-8. `downstreamTarget`
-9. `downstreamDurationMs`
-10. `errorCode` if any
-
-### Minimum metrics to compute
-
-Even if you do not add Prometheus yet, you should still track:
-
-1. p50 latency
-2. p95 latency
-3. p99 latency
-4. payment provider latency
-5. DB query latency
-6. worker queue depth
-7. retry counts
-8. failure counts
-9. cold start count
-
-### Recommended local approach
-
-Start simple:
-
-1. emit JSON logs to stdout
-2. inspect with `docker compose logs`
-3. optionally add a lightweight in-memory metrics endpoint per service
-
-Then, if you want a more realistic lab, add:
-
-1. Prometheus
-2. Grafana
-3. OpenTelemetry
-4. Jaeger or Tempo
-
-Those are optional upgrades. They are not required to practice the concepts in this document.
-
-### How to test it
-
-Simulate slow behavior:
-
-1. set provider mode to `timeout_before_response`
-2. create queue backlog
-3. enable cold-start delay
-
-Then trace a single request ID across logs and answer:
-
-1. was the API slow
-2. was the provider slow
-3. was the DB slow
-4. was the system retrying
-5. was the worker behind
-
-### Senior-level details to include in your explanation
-
-1. check p95 and p99, not just averages
-2. inspect model or downstream service latency
-3. inspect DB query timing
-4. inspect queue depth
-5. inspect retries and cold starts
-6. use correlation IDs and traces
-7. check recent deployments or configuration changes
-
-## Suggested Build Order
-
-If you want the smoothest implementation path, build in this order:
-
-1. shared TypeORM `DataSource`, entities, and first migration
-2. payment-provider mock
-3. API skeleton with health route
-4. NGINX gateway with upstream load balancing
-5. login and in-memory sessions
-6. shared PostgreSQL-backed sessions through TypeORM
-7. orders and payments tables
-8. idempotency on `POST /payments`
-9. worker and job polling
-10. email retries and dead-letter handling
-11. payment reconciliation job
-12. permission cache and invalidation experiment
-13. rate limiting
-14. cold-start simulation
-15. structured logging and timing
-
-That order is deliberate:
-
-1. it gets the system running quickly
-2. it lets you reproduce Q18 early
-3. it adds Q15 and Q17 after the core request path exists
-4. it adds Q16 after the worker exists
-5. it leaves observability for after the core flows are alive
-
-## Suggested Manual Test Checklist
-
-When your lab is ready, you should be able to prove all of these:
-
-1. duplicate payment requests with the same idempotency key do not create two charges
-2. duplicate key with different payload is rejected
-3. transient email failures retry and eventually succeed or dead-letter
-4. a successful external payment plus failed local finalize step creates an uncertain state, not silent inconsistency
-5. in-memory sessions fail under two replicas
-6. PostgreSQL-backed sessions through TypeORM fix the random logout issue
-7. repeated public requests eventually hit `429`
-8. revoked permissions stop working quickly after your invalidation fix
-9. first request after restart is slower than warm requests
-10. logs let you trace one request end to end
-
-## Interview Practice Angle
-
-As you build each feature, practice explaining three things:
-
-1. the failure mode
-2. the minimal safe design
-3. the tradeoffs
-
-Example:
-
-- Q15 failure mode:
-  a client retry can create duplicate charges
-- Q15 safe design:
-  persist idempotency state, request hash, and final result
-- Q15 tradeoffs:
-  storage cost, TTL design, and handling in-progress races
-
-Do this for every scenario. It is one of the best ways to turn coding practice into interview fluency.
-
-## Optional Upgrades After The Base Lab Works
-
-If you want to make the lab more production-like later, add:
-
-1. Redis for faster distributed sessions and rate limiting
-2. Kafka or RabbitMQ for queue work instead of PostgreSQL polling
-3. Prometheus and Grafana for metrics
-4. OpenTelemetry and Jaeger for tracing
-5. k6 load tests
-6. a third API replica to create more realistic fan-out
-
-These are upgrades, not prerequisites. The PostgreSQL plus TypeORM version is enough to learn the core concepts well.
-
-## Final Recommendation
-
-Do not try to perfect everything at once.
-
-Build the smallest version that lets you reproduce each bug:
-
-1. first make it fail
-2. then make it safe
-3. then make it observable
-
-That rhythm is exactly what helps with distributed systems interviews, because the best answers are not just definitions. They show that you understand how systems break and how to contain the blast radius.

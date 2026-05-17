@@ -1,0 +1,27 @@
+{
+  "name": "distributed-systems-exercise",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local practice lab for distributed systems exercises.",
+  "engines": {
+    "node": ">=24.0.0",
+    "npm": ">=10.0.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "node ./scripts/run-build.mjs",
+    "dev:api": "node ./scripts/run-package-script.mjs apps/api dev",
+    "dev:worker": "node ./scripts/run-package-script.mjs apps/worker dev",
+    "dev:provider": "node ./scripts/run-package-script.mjs apps/payment-provider dev",
+    "db:migrate": "node ./scripts/run-package-script.mjs packages/database migrate",
+    "db:revert": "node ./scripts/run-package-script.mjs packages/database revert",
+    "db:generate": "node ./scripts/run-package-script.mjs packages/database generate",
+    "db:seed": "node ./scripts/run-package-script.mjs packages/database seed",
+    "infra:up": "node ./scripts/run-docker-compose.mjs up -d postgres",
+    "infra:down": "node ./scripts/run-docker-compose.mjs down",
+    "infra:logs": "node ./scripts/run-docker-compose.mjs logs -f postgres"
+  }
+}
