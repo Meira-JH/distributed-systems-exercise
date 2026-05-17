@@ -10,6 +10,34 @@ This guide gives a local practice environment for distributed systems using:
 
 The goal is to build a small system that is intentionally easy to break, observe, fix, and test. 
 
+## Project Preview
+
+This is the current planning snapshot for the local system bootstrap work.
+
+### Story Status Model
+
+- `not ready`
+  The story is still blocked by missing dependencies, unresolved decisions, or earlier work that has not been completed yet.
+- `ready-for-dev`
+  The story is clear enough to implement now and does not have any remaining project-internal blockers.
+- `ready-for-review`
+  Development work is complete and the story is waiting for review, validation, or acceptance.
+- `done`
+  The story has been implemented, reviewed, and accepted as complete.
+
+### Current Story Status
+
+| Story | Status | Notes |
+| --- | --- | --- |
+| [1.1 Bootstrap The Workspace](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.1-bootstrap-workspace.md) | `ready-for-dev` | This is the first implementation story and establishes the repo, env management, and local PostgreSQL baseline. |
+| [1.2 Bootstrap The API Service](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.2-bootstrap-api-service.md) | `not ready` | Depends on the workspace bootstrap and shared database baseline. |
+| [1.3 Bootstrap The Worker](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.3-bootstrap-worker.md) | `not ready` | Depends on the workspace bootstrap and shared database baseline. |
+| [1.4 Bootstrap The Payment Provider Mock](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.4-bootstrap-payment-provider-mock.md) | `not ready` | Depends on the workspace bootstrap story completing first. |
+| [1.5 Add The Shared Database Layer](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.5-add-shared-database-layer.md) | `not ready` | Depends on the workspace, env, and PostgreSQL container baseline from Story 1.1. |
+| [1.6 Add Seed Data](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.6-add-seed-data.md) | `not ready` | Depends on the shared TypeORM database layer and migration flow. |
+| [1.7 Configure The NGINX Gateway](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.7-configure-nginx-gateway.md) | `not ready` | Depends on the API service existing and the local stack being wired. |
+| [1.8 Add Local Smoke Verification](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.8-add-local-smoke-verification.md) | `not ready` | Depends on the stack components being runnable first. |
+
 ## What You Will Build
 
 You will run six containers locally:
@@ -181,7 +209,7 @@ Keep these principles constant while building:
 
 Install these locally:
 
-1. Node.js `20.x` or later
+1. Node.js `24.x` or later
 2. `npm` `10.x` or later
 3. Docker Desktop
 4. `curl`
@@ -334,7 +362,7 @@ SIMULATE_COLD_START_MS=0
 
 ## Step 6: Create Dockerfiles And NGINX Config
 
-The Node services should each have a simple Dockerfile based on Node `20-alpine`.
+The Node services should each have a simple Dockerfile based on `node:24-alpine`.
 
 The pattern is:
 

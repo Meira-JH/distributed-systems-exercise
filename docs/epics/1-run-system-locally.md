@@ -36,7 +36,7 @@ This epic includes:
 
 1. repository bootstrap for the local workspace
 2. minimal package setup for the Node services and shared packages
-3. Dockerfiles for the Node services
+3. Dockerfiles for the Node services using `node:24-alpine`
 4. `docker-compose.yml` for the full local stack
 5. NGINX gateway configuration
 6. shared TypeORM `DataSource`
@@ -84,13 +84,16 @@ This epic is successful when all of the following are true:
 
 ### Story 1: Bootstrap The Workspace
 
-Create the minimal repository structure and root workspace configuration needed for local development.
+Create the minimal repository structure, root workspace configuration, basic local PostgreSQL container configuration, and repository-wide environment management baseline needed for local development.
 
 Acceptance criteria:
 
 1. root `package.json` uses npm workspaces
 2. root scripts exist for build, local startup, migrations, and seeding
 3. shared TypeScript config exists
+4. the repository includes the basic local PostgreSQL Docker configuration
+5. the repository includes a root `.gitignore`
+6. the repository includes the `.env` templates and conventions needed for safe local configuration
 
 ### Story 2: Bootstrap The API Service
 
@@ -172,14 +175,16 @@ The local baseline should follow these implementation rules:
 3. use TypeORM with `synchronize: false`
 4. use TypeORM migrations for schema creation
 5. use `reflect-metadata` in services that initialize TypeORM
-6. keep startup paths as simple as possible
+6. use Node.js `24.x` or later for local development
+7. use `node:24-alpine` for the Node service Dockerfiles
+8. keep startup paths as simple as possible
 
 ## Dependencies
 
 This epic depends on:
 
 1. Docker being available locally
-2. Node.js and npm being installed locally
+2. Node.js `24.x` or later and npm being installed locally
 3. the repository following the structure described in [repo-overview.md](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/repo-overview.md)
 
 ## Risks
