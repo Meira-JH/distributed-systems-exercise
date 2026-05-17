@@ -25,19 +25,6 @@ This is the current planning snapshot for the local system bootstrap work.
 - `done`
   The story has been implemented, reviewed, and accepted as complete.
 
-### Current Story Status
-
-| Story | Status | Notes |
-| --- | --- | --- |
-| [1.1 Bootstrap The Workspace](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.1-bootstrap-workspace.md) | `ready-for-dev` | This is the first implementation story and establishes the repo, env management, and local PostgreSQL baseline. |
-| [1.2 Bootstrap The API Service](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.2-bootstrap-api-service.md) | `not ready` | Depends on the workspace bootstrap and shared database baseline. |
-| [1.3 Bootstrap The Worker](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.3-bootstrap-worker.md) | `not ready` | Depends on the workspace bootstrap and shared database baseline. |
-| [1.4 Bootstrap The Payment Provider Mock](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.4-bootstrap-payment-provider-mock.md) | `not ready` | Depends on the workspace bootstrap story completing first. |
-| [1.5 Add The Shared Database Layer](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.5-add-shared-database-layer.md) | `not ready` | Depends on the workspace, env, and PostgreSQL container baseline from Story 1.1. |
-| [1.6 Add Seed Data](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.6-add-seed-data.md) | `not ready` | Depends on the shared TypeORM database layer and migration flow. |
-| [1.7 Configure The NGINX Gateway](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.7-configure-nginx-gateway.md) | `not ready` | Depends on the API service existing and the local stack being wired. |
-| [1.8 Add Local Smoke Verification](/Users/jm/Documents/Github/Meira-JH/distributed-systems-exercise/docs/stories/1.8-add-local-smoke-verification.md) | `not ready` | Depends on the stack components being runnable first. |
-
 ## What You Will Build
 
 You will run six containers locally:
@@ -55,7 +42,7 @@ You will run six containers locally:
 6. `postgres`
    Shared state for all services.
 
-## Recommended Repository Structure
+## Repository Structure
 
 Create the repo like this:
 
@@ -163,7 +150,7 @@ distributed-systems-exercise/
   docker-compose.yml
 ```
 
-## High-Level Architecture
+## Context Architecture
 
 ```mermaid
 flowchart LR
